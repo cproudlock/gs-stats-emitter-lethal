@@ -1,0 +1,30 @@
+# Build outputs
+bin/
+obj/
+dist/
+*.dll
+*.pdb
+
+# Secrets — never commit
+.env
+.env.*
+.thunderstore-token
+*.token
+
+# BepInEx config files contain the ingest bearer token at runtime.
+# Friends paste their gsk_* into the cfg. Never commit one.
+*.cfg
+BepInEx/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+LogOutput.log

@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>GsLethalStatsEmitter</AssemblyName>
+    <RootNamespace>GsLethalStatsEmitter</RootNamespace>
+    <Version>0.1.5</Version>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LCManaged>/home/cproudlock/.steam/steam/steamapps/common/Lethal Company/Lethal Company_Data/Managed</LCManaged>
+    <BepInExCore>/home/cproudlock/.config/r2modmanPlus-local/LethalCompany/profiles/Default/BepInEx/core</BepInExCore>
+    <DeployDir>/home/cproudlock/.config/r2modmanPlus-local/LethalCompany/profiles/Default/BepInEx/plugins/cproudlock-GsLethalStatsEmitter</DeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(LCManaged)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.Netcode.Runtime">
+      <HintPath>$(LCManaged)/Unity.Netcode.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(LCManaged)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(LCManaged)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(LCManaged)/UnityEngine.AnimationModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(LCManaged)/UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCore)/BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCore)/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="DeployToProfile" AfterTargets="Build" Condition="Exists('$(BepInExCore)')">
+    <MakeDir Directories="$(DeployDir)" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(DeployDir)" />
+    <Copy SourceFiles="manifest.json" DestinationFolder="$(DeployDir)" Condition="Exists('manifest.json')" />
+    <Copy SourceFiles="icon.png" DestinationFolder="$(DeployDir)" Condition="Exists('icon.png')" />
+    <Message Text="Deployed GsLethalStatsEmitter to $(DeployDir)" Importance="high" />
+  </Target>
+</Project>

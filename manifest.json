@@ -1,0 +1,9 @@
+{
+  "name": "GsLethalStatsEmitter",
+  "version_number": "0.1.5",
+  "website_url": "https://gs.proudtech.net/lethal",
+  "description": "Posts session/day/death/item stats to gs.proudtech.net for the gs dashboard.",
+  "dependencies": [
+    "BepInEx-BepInExPack-5.4.2305"
+  ]
+}
