@@ -1,6 +1,6 @@
 {
   "name": "GsLethalStatsEmitter",
-  "version_number": "0.1.5",
+  "version_number": "0.2.0",
   "website_url": "https://gs.proudtech.net/lethal",
   "description": "Posts session/day/death/item stats to gs.proudtech.net for the gs dashboard.",
   "dependencies": [

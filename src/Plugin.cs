@@ -18,7 +18,7 @@ namespace GsLethalStatsEmitter
     {
         public const string GUID = "net.cproudlock.gslethalstatsemitter";
         public const string NAME = "gs Lethal Company Stats";
-        public const string VERSION = "0.1.0";
+        public const string VERSION = "0.2.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<string> IngestUrl;
@@ -140,7 +140,10 @@ namespace GsLethalStatsEmitter
         }
 
         // POST + reset. Idempotent on the server via sessionIdLocal dedup.
-        internal static void EmitAndReset(string outcome)
+        // `blocking` = send synchronously (used on disconnect/quit, where the
+        // process/lobby tears down before a fire-and-forget Task would finish —
+        // that gap is why sessions ending via "host shut down" never uploaded).
+        internal static void EmitAndReset(string outcome, bool blocking = false)
         {
             var s = Session;
             if (s == null) return;
@@ -156,12 +159,38 @@ namespace GsLethalStatsEmitter
                 s.endedAtUtc = DateTime.UtcNow;
                 ComputeAggregates(s);
                 var json = SessionJson.Serialize(s);
-                Log.LogInfo($"[gs] emit session id={s.sessionIdLocal} outcome={outcome} days={s.daysSurvived} players={s.players.Count} deaths={s.deaths.Count} bytes={json.Length}");
-                _ = Task.Run(() => PostJson(json));
+                Log.LogInfo($"[gs] emit session id={s.sessionIdLocal} outcome={outcome} days={s.daysSurvived} players={s.players.Count} deaths={s.deaths.Count} bytes={json.Length} blocking={blocking}");
+                if (blocking) PostBlocking(json);
+                else _ = Task.Run(() => PostJson(json));
             }
             catch (Exception e)
             {
                 Log.LogError($"[gs] emit error: {e}");
+            }
+        }
+
+        // Synchronous send for the disconnect/quit path. Blocks the calling
+        // thread up to 6s so the request actually leaves before the game exits.
+        static void PostBlocking(string json)
+        {
+            if (!Enabled.Value) { Log.LogInfo("[gs] disabled, skip POST"); return; }
+            if (string.IsNullOrEmpty(IngestToken.Value)) { Log.LogWarning("[gs] no token configured, skipping"); return; }
+            try
+            {
+                using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(6)))
+                {
+                    var req = new HttpRequestMessage(HttpMethod.Post, IngestUrl.Value)
+                    {
+                        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                    };
+                    req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {IngestToken.Value}");
+                    var res = http.SendAsync(req, cts.Token).GetAwaiter().GetResult();
+                    Log.LogInfo($"[gs] POST(blocking) {(int)res.StatusCode}");
+                }
+            }
+            catch (Exception e)
+            {
+                Log.LogWarning($"[gs] POST(blocking) error: {e.Message}");
             }
         }
 
@@ -654,27 +683,43 @@ namespace GsLethalStatsEmitter
         }
     }
 
-    // Death event — KillPlayer signature confirmed via Mono.Cecil dump of the
-    // shipped Assembly-CSharp.dll: 6 params with sensible defaults.
-    [HarmonyPatch(typeof(PlayerControllerB), nameof(PlayerControllerB.KillPlayer))]
-    static class P_PlayerControllerB_KillPlayer
+    // Death event. We hook KillPlayerClientRpc (not KillPlayer): KillPlayer only
+    // runs on the dying player's own client, so co-op clients missed every other
+    // player's deaths. The ClientRpc fires on ALL clients for ANY player's death,
+    // so a single reporter now records the whole crew. Signature confirmed via
+    // metadata dump. The host invokes it twice (send + execute stages), so we
+    // dedupe per playerId within a 1s window.
+    [HarmonyPatch(typeof(PlayerControllerB), "KillPlayerClientRpc")]
+    static class P_PlayerControllerB_KillPlayerClientRpc
     {
-        static void Postfix(PlayerControllerB __instance, Vector3 bodyVelocity, bool spawnBody, CauseOfDeath causeOfDeath, int deathAnimation, Vector3 positionOffset, bool setOverrideDropItems)
+        static readonly Dictionary<int, DateTime> lastDeathAt = new Dictionary<int, DateTime>();
+
+        static void Postfix(int playerId, int causeOfDeath)
         {
-            if (Plugin.Session == null || __instance == null) return;
+            if (Plugin.Session == null) return;
             try
             {
-                var slot = Plugin.GetPlayerSlot(__instance.playerUsername);
+                var now = DateTime.UtcNow;
+                if (lastDeathAt.TryGetValue(playerId, out var t) && (now - t).TotalSeconds < 1.0) return;
+                lastDeathAt[playerId] = now;
+
+                var sor = StartOfRound.Instance;
+                PlayerControllerB pc = (sor != null && sor.allPlayerScripts != null && playerId >= 0 && playerId < sor.allPlayerScripts.Length)
+                    ? sor.allPlayerScripts[playerId] : null;
+                string name = pc != null ? pc.playerUsername : "(unknown)";
+                var cod = (CauseOfDeath)causeOfDeath;
+
+                var slot = Plugin.GetPlayerSlot(name);
                 if (slot != null) slot.deaths++;
-                string killer = "environment";
+                string killer;
                 if (slot != null && !string.IsNullOrEmpty(slot.lastDamagedByEnemy) &&
-                    (DateTime.UtcNow - slot.lastDamagedAt).TotalSeconds < 10)
+                    (now - slot.lastDamagedAt).TotalSeconds < 10)
                 {
                     killer = slot.lastDamagedByEnemy;
                 }
                 else
                 {
-                    switch (causeOfDeath)
+                    switch (cod)
                     {
                         case CauseOfDeath.Gravity:
                         case CauseOfDeath.Crushing:
@@ -693,22 +738,22 @@ namespace GsLethalStatsEmitter
                             break;
                     }
                 }
-                var pos = __instance.transform != null ? __instance.transform.position : Vector3.zero;
+                var pos = pc != null && pc.transform != null ? pc.transform.position : Vector3.zero;
                 Plugin.Session.deaths.Add(new DeathEvent
                 {
                     dayIndex = Plugin.CurrentDay()?.dayIndex ?? Math.Max(1, Plugin.Session.days.Count),
-                    playerName = __instance.playerUsername ?? "(unknown)",
-                    causeOfDeath = causeOfDeath.ToString(),
+                    playerName = name,
+                    causeOfDeath = cod.ToString(),
                     killer = killer,
                     moon = Plugin.CurrentMoon(),
                     posX = pos.x,
                     posY = pos.y,
                     posZ = pos.z,
-                    tsUtc = DateTime.UtcNow,
+                    tsUtc = now,
                 });
                 var d = Plugin.CurrentDay();
                 if (d != null) d.deaths++;
-                Plugin.Log.LogInfo($"[gs] death {__instance.playerUsername} cause={causeOfDeath} killer={killer}");
+                Plugin.Log.LogInfo($"[gs] death {name} cause={cod} killer={killer}");
             }
             catch (Exception e) { Plugin.Log.LogWarning($"[gs] death hook err: {e.Message}"); }
         }
@@ -794,6 +839,22 @@ namespace GsLethalStatsEmitter
     static class P_StartOfRound_ResetShip
     {
         static void Postfix() { Plugin.EmitAndReset("abandoned"); }
+    }
+
+    // THE key fix: a session that ends by leaving / the host shutting down /
+    // alt-F4 never hits the clean end hooks above, so it was never uploaded.
+    // Disconnect() fires on any lobby teardown; OnApplicationQuit() on game exit.
+    // Both send synchronously (blocking) so the request leaves before teardown.
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Disconnect))]
+    static class P_GameNetworkManager_Disconnect
+    {
+        static void Prefix() { Plugin.EmitAndReset("disconnected", blocking: true); }
+    }
+
+    [HarmonyPatch(typeof(GameNetworkManager), "OnApplicationQuit")]
+    static class P_GameNetworkManager_OnApplicationQuit
+    {
+        static void Prefix() { Plugin.EmitAndReset("quit", blocking: true); }
     }
 
     // ===== Purchases ==========================================================
