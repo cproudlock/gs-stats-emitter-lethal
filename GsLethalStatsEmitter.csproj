@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>GsLethalStatsEmitter</AssemblyName>
     <RootNamespace>GsLethalStatsEmitter</RootNamespace>
-    <Version>0.2.1</Version>
+    <Version>0.5.0</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -20,6 +20,12 @@
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
       <HintPath>$(LCManaged)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Easy Save 3 lives here, not in Assembly-CSharp. Needed to stamp the
+         playthrough id into Lethal Company's own save file. -->
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(LCManaged)/Assembly-CSharp-firstpass.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Unity.Netcode.Runtime">
