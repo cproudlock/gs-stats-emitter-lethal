@@ -18,7 +18,7 @@ namespace GsLethalStatsEmitter
     {
         public const string GUID = "net.cproudlock.gslethalstatsemitter";
         public const string NAME = "gs Lethal Company Stats";
-        public const string VERSION = "0.2.0";
+        public const string VERSION = "0.2.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<string> IngestUrl;

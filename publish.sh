@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 community="${THUNDERSTORE_COMMUNITY:-lethal-company}"
-team="${THUNDERSTORE_TEAM:-cproudlock}"
+team="${THUNDERSTORE_TEAM:-Proudlock_Technology}"
 
 version=$(grep -oE '"version_number":\s*"[^"]+"' manifest.json | sed -E 's/.*"([^"]+)"$/\1/')
 echo "building GsLethalStatsEmitter v$version"
